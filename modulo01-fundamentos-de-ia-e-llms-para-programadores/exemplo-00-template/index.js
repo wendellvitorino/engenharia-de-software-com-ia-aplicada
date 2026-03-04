@@ -1,5 +1,34 @@
 import tf from '@tensorflow/tfjs-node';
 
+async function trainModel(inputXs, outputYs){
+    const model = tf.sequential();
+    model.add(tf.layers.dense({inputShape: [7], units:80, activation: 'relu'}));
+    model.add(tf.layers.dense({units:3, activation: 'softmax'}));
+
+    model.compile({
+        optimizer:'adam',
+        loss: 'categoricalCrossentropy',
+        metrics: ['accuracy']
+    });
+
+    await model.fit(inputXs, outputYs, {verbose: 0, epochs:100, shuffle: true, callbacks: {
+        onEpochEnd: (epoch, logs) => {
+            //if(epoch % 100 === 0){
+                console.log(`Epoch ${epoch}: loss = ${logs.loss.toFixed(4)}, accuracy = ${logs.acc.toFixed(4)}`);
+            //}
+        }
+    }});
+    return model;
+}
+
+async function predict(model, pessoa){
+    const tfInput = tf.tensor2d(pessoa)
+    const pred = model.predict(tfInput) 
+    const predArray = await pred.array()
+    console.log(predArray);
+    return predArray[0].map((prob, index) => ({prob, index}))
+}
+
 // Exemplo de pessoas para treino (cada pessoa com idade, cor e localização)
 // const pessoas = [
 //     { nome: "Erick", idade: 30, cor: "azul", localizacao: "São Paulo" },
@@ -36,5 +65,20 @@ const tensorLabels = [
 const inputXs = tf.tensor2d(tensorPessoasNormalizado)
 const outputYs = tf.tensor2d(tensorLabels)
 
-inputXs.print();
-outputYs.print();
+const model = await trainModel(inputXs, outputYs)
+
+const pessoa = {Nome: "Maria", idade: 28, cor: "verde", localizacao: "Curitiba"}
+const pessoaTensorNormalizado = [[0.2, 0, 0, 1, 0, 1, 0]] // Normalizamos e one-hot encoded
+
+await predict(model, pessoaTensorNormalizado)
+
+const predictions = await predict(model, pessoaTensorNormalizado)
+const results = predictions.sort((a, b) => b.prob - a.prob).map(pred => ({
+    categoria: labelsNomes[pred.index],
+    probabilidade: pred.prob.toFixed(4)
+}))
+
+console.log("Predições ordenadas por probabilidade:");
+results.forEach(result => {
+    console.log(`${result.categoria}: ${result.probabilidade}`);
+})
